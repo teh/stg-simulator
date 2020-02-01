@@ -168,10 +168,20 @@ export const substitute = (e: Expression, oldName: string, newName: string): Exp
   const substituteObject = (obj: HeapObject): HeapObject => {
     switch (obj.kind) {
       case "THUNK": {
-        return { kind: "THUNK", expression: substitute(obj.expression, oldName, newName)}
+        return { kind: obj.kind, expression: substitute(obj.expression, oldName, newName) }
       }
       case "CON": {
-        return { kind: "CON", tag: obj.tag, payload: obj.payload.map(x => substituteObject(x))}
+        return { kind: obj.kind, tag: obj.tag, payload: obj.payload.map(x => substituteObject(x)) }
+      }
+      case "FUN": {
+        return { kind: obj.kind, arguments: obj.arguments, expression: substitute(obj.expression, oldName, newName) }
+      }
+      case "PAP": {
+        return {
+          kind: obj.kind,
+          f: substituteVar(obj.f),
+          arguments: obj.arguments.map(x => substituteVar(x)),
+        }
       }
     }
     return obj;
@@ -292,7 +302,7 @@ export const enter = (e: Expression): Expression => {
             }
             else if (obj.arguments.length > e.arguments.length) {
               // CALLK
-              stack.push({kind: "ApplyToArgs", arguments: obj.arguments.slice(e.arguments.length, obj.arguments.length)});
+              stack.push({ kind: "ApplyToArgs", arguments: obj.arguments.slice(e.arguments.length, obj.arguments.length) });
 
               // substitute everything substitutable
               let exp: Expression = e.f;
