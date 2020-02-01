@@ -133,7 +133,7 @@ export const heap: Record<string, HeapObject> = {
                 arguments: [mkVar("acc"), mkVar("h")]
               },
             }, in: {
-              kind: "FunctionCall", f: mkVar("foldl"), arguments: [mkVar("newAcc"), mkVar("t")],
+              kind: "FunctionCall", f: mkVar("foldl"), arguments: [mkVar("f"), mkVar("newAcc"), mkVar("t")],
             }
           },
         },
@@ -147,8 +147,8 @@ export const heap: Record<string, HeapObject> = {
     }
   },
   list1: { kind: "CON", tag: "Cons", payload: ["one", "nil"] },
-  list2: { kind: "CON", tag: "Cons", payload: ["two", "one"] },
-  list3: { kind: "CON", tag: "Cons", payload: ["three", "two"] },
+  list2: { kind: "CON", tag: "Cons", payload: ["two", "list1"] },
+  list3: { kind: "CON", tag: "Cons", payload: ["three", "list2"] },
   main: {
     kind: "THUNK", expression: { kind: "FunctionCall", f: mkVar("sum"), arguments: [mkVar("list3")] },
   }
@@ -162,8 +162,21 @@ const isValue = (v: Var) => {
 }
 
 
-const substitute = (e: Expression, oldName: string, newName: string): Expression => {
+export const substitute = (e: Expression, oldName: string, newName: string): Expression => {
   const substituteVar = (v: Var) => v.name == oldName ? mkVar(newName) : v;
+
+  const substituteObject = (obj: HeapObject): HeapObject => {
+    switch (obj.kind) {
+      case "THUNK": {
+        return { kind: "THUNK", expression: substitute(obj.expression, oldName, newName)}
+      }
+      case "CON": {
+        return { kind: "CON", tag: obj.tag, payload: obj.payload.map(x => substituteObject(x))}
+      }
+    }
+    return obj;
+  };
+
   switch (e.kind) {
     case "FunctionCall": {
       return {
@@ -189,7 +202,7 @@ const substitute = (e: Expression, oldName: string, newName: string): Expression
       return {
         kind: e.kind,
         in: substitute(e.in, oldName, newName),
-        newObject: e.newObject,
+        newObject: substituteObject(e.newObject),
         name: e.name, // What about shadowing names?
       }
     }
@@ -213,12 +226,34 @@ export const enter = (e: Expression): Expression => {
       switch (obj.kind) {
         case "FUN":
         case "PAP":
+          return e;
         case "CON":
-          if (stack[stack.length - 1] !== undefined) {
-
+          const stackTop = stack[stack.length - 1];
+          if (stackTop !== undefined && stackTop.kind === "CaseCont") {
+            console.log("stackTop.alternatives", stackTop.alternatives)
+            for (let alt of stackTop.alternatives) {
+              // find matching tag branch
+              if (alt.tag != obj.tag) { continue }
+              switch (alt.tag) {
+                case "Nil": {
+                  return alt.expression
+                }
+                case "Cons": {
+                  const h = obj.payload[0];
+                  const t = obj.payload[1];
+                  let exp = substitute(alt.expression, alt.bindingName[0].name, h)
+                  exp = substitute(exp, alt.bindingName[1].name, t)
+                  return exp;
+                }
+                case "I": {
+                  return alt.expression
+                }
+              }
+            }
           }
           return e;
         case "THUNK":
+          console.log("THUNK", e)
           heap[e.name] = { kind: "BLACKHOLE" };
           stack.push({ kind: "UpdateCont", var: e });
           return obj.expression;
@@ -240,6 +275,7 @@ export const enter = (e: Expression): Expression => {
     }
     case "FunctionCall": {
       if (e.f.kind == "Var") {
+        console.log("H", `"${e.f.name}"`, heap)
         const obj = heap[e.f.name];
         switch (obj.kind) {
           case "FUN": {
