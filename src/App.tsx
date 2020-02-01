@@ -10,7 +10,7 @@ function unreachable(e: never): never {
 
 interface FUN {
   kind: "FUN",
-  arguments: Var[],
+  arguments: Atom[],
   expression: Expression,
 }
 
@@ -23,7 +23,7 @@ interface CON {
 interface PAP {
   kind: "PAP",
   f: Var,
-  arguments: Var[],
+  arguments: Atom[],
 }
 
 interface THUNK {
@@ -38,7 +38,7 @@ interface BLACKHOLE {
 interface FunctionCall {
   kind: "FunctionCall",
   f: Var, // lookup on heap
-  arguments: Var[], // lookup on heap
+  arguments: Atom[],
 }
 
 interface Case {
@@ -49,8 +49,8 @@ interface Case {
 
 interface Alternative {
   kind: "Alternative",
-  tag: "Cons" | "Nil" | "I",
-  bindingName: Var[],
+  tag: "Cons" | "Nil" | "I" | "default",
+  bindingName: Atom[],
   expression: Expression,
 }
 
@@ -62,12 +62,18 @@ interface Let {
 }
 interface PrimPlus {
   kind: "PrimPlus",
-  a1: number,
-  a2: number,
+  a1: Literal,
+  a2: Literal,
 }
 interface Var {
   kind: "Var",
   name: string,
+}
+
+interface Literal {
+  kind: "Literal",
+  name: string,
+  value: number,
 }
 
 interface CaseCont {
@@ -80,10 +86,11 @@ interface UpdateCont {
 }
 interface ApplyToArgs {
   kind: "ApplyToArgs",
-  arguments: Var[],
+  arguments: Atom[],
 }
 
 const mkVar = (name: string): Var => ({ kind: "Var", name });
+const mkLiteral = (name: string): Literal => ({ kind: "Literal", name, value: 0 });
 
 let varCounter = 0;
 const freshVar = (): Var => {
@@ -91,8 +98,9 @@ const freshVar = (): Var => {
 }
 
 export type HeapObject = FUN | CON | PAP | THUNK | BLACKHOLE;
-export type Expression = FunctionCall | Case | Let | PrimPlus | Var;
+export type Expression = FunctionCall | Case | Let | PrimPlus | Atom;
 export type Continuation = CaseCont | UpdateCont | ApplyToArgs;
+export type Atom = Literal | Var;
 
 const stack: Continuation[] = [];
 
@@ -107,13 +115,21 @@ export const heap: Record<string, HeapObject> = {
     kind: "FUN", arguments: [mkVar("x"), mkVar("y")], expression: {
       kind: "Case", expression: mkVar("x"),
       alternatives: [{
-        kind: "Alternative", tag: "I", bindingName: [mkVar("i")], expression: {
-          kind: "Case", expression: mkVar("x"),
+        kind: "Alternative", tag: "I", bindingName: [mkLiteral("i")], expression: {
+          kind: "Case", expression: mkVar("y"),
           alternatives: [{
-            kind: "Alternative", tag: "I", bindingName: [mkVar("j")], expression: {
-              kind: "Let", name: "x",
-              newObject: { kind: "CON", tag: "I", payload: [{ kind: "PrimPlus", a1: 1, a2: 2 }] },
-              in: mkVar("x"),
+            kind: "Alternative", tag: "I", bindingName: [mkLiteral("j")], expression: {
+              kind: "Case", expression: { kind: "PrimPlus", a1: mkLiteral("i"), a2: mkLiteral("j") },
+              alternatives: [{
+                kind: "Alternative",
+                tag: "default",
+                bindingName: [mkVar("result")],
+                expression: {
+                  kind: "Let", name: "value",
+                  newObject: { kind: "CON", tag: "I", payload: [mkVar("result")] },
+                  in: mkVar("value")
+                },
+              }]
             }
           }]
         }
@@ -164,6 +180,7 @@ const isValue = (v: Var) => {
 
 export const substitute = (e: Expression, oldName: string, newName: string): Expression => {
   const substituteVar = (v: Var) => v.name == oldName ? mkVar(newName) : v;
+  const substituteAtom = (v: Atom) => v.name == oldName ? mkVar(newName) : v;
 
   const substituteObject = (obj: HeapObject): HeapObject => {
     switch (obj.kind) {
@@ -180,7 +197,7 @@ export const substitute = (e: Expression, oldName: string, newName: string): Exp
         return {
           kind: obj.kind,
           f: substituteVar(obj.f),
-          arguments: obj.arguments.map(x => substituteVar(x)),
+          arguments: obj.arguments.map(x => substituteAtom(x)),
         }
       }
     }
@@ -192,7 +209,7 @@ export const substitute = (e: Expression, oldName: string, newName: string): Exp
       return {
         kind: e.kind,
         f: substituteVar(e.f),
-        arguments: e.arguments.map(substituteVar)
+        arguments: e.arguments.map(substituteAtom)
       }
     }
     case "Case": {
@@ -224,6 +241,9 @@ export const substitute = (e: Expression, oldName: string, newName: string): Exp
     case "PrimPlus": {
       return e;
     }
+    case "Literal": {
+      throw new Error("literal can't be substituted")
+    }
   }
   unreachable(e);
 }
@@ -231,16 +251,32 @@ export const substitute = (e: Expression, oldName: string, newName: string): Exp
 
 export const enter = (e: Expression): Expression => {
   switch (e.kind) {
+    case "Literal": {
+      const stackTop = stack[stack.length - 1];
+      if (stackTop !== undefined && stackTop.kind === "CaseCont") {
+        stack.pop();
+        const alt = stackTop.alternatives[0]
+        if (alt && alt.tag == "default") {
+          let exp = substitute(alt.expression, alt.bindingName[0].name, e.name);
+          return exp;
+        }
+      }
+      throw new Error("no default literal case alternative");
+    }
     case "Var": {
       const obj = heap[e.name];
       switch (obj.kind) {
         case "FUN":
+          console.log("--- FUN")
+          return e;
         case "PAP":
+          console.log("--- PAP")
           return e;
         case "CON":
           const stackTop = stack[stack.length - 1];
           if (stackTop !== undefined && stackTop.kind === "CaseCont") {
-            console.log("stackTop.alternatives", stackTop.alternatives)
+            stack.pop();
+            console.log("stackTop.alternatives", stackTop.alternatives[0])
             for (let alt of stackTop.alternatives) {
               // find matching tag branch
               if (alt.tag != obj.tag) { continue }
@@ -259,9 +295,22 @@ export const enter = (e: Expression): Expression => {
                   return alt.expression
                 }
               }
+            } // end initial for
+            for (let alt of stackTop.alternatives) {
+              if (alt.tag == "default") {
+                console.log("default case")
+                return alt.expression;
+              }
             }
+          } else if (stackTop !== undefined && stackTop.kind === "UpdateCont") {
+            stack.pop();
+            console.log("stack\n", stack)
+            console.log("stackTop.update-var", stackTop.var, "with", e.name);
+            heap[stackTop.var.name] = heap[e.name];
+            return e;
           }
-          return e;
+          console.log(stack)
+          throw new Error(`unhandled CON case: ${JSON.stringify(heap[e.name])}`);
         case "THUNK":
           console.log("THUNK", e)
           heap[e.name] = { kind: "BLACKHOLE" };
@@ -273,9 +322,9 @@ export const enter = (e: Expression): Expression => {
     }
     case "PrimPlus": {
       // TODO - this isn't really a primop in the paper sense because I'm heap-allocating.
-      const v = freshVar();
-      heap[v.name] = { kind: "CON", tag: "I", payload: [e.a1 + e.a2] }
-      return v;
+      const lit = mkLiteral("-");
+      lit.value = e.a1.value + e.a2.value;
+      return lit;
     }
     case "Let": {
       // heap alloc, substitute, enter expression
@@ -285,7 +334,7 @@ export const enter = (e: Expression): Expression => {
     }
     case "FunctionCall": {
       if (e.f.kind == "Var") {
-        console.log("H", `"${e.f.name}"`, heap)
+        // console.log("H", `"${e.f.name}"`, heap)
         const obj = heap[e.f.name];
         switch (obj.kind) {
           case "FUN": {
