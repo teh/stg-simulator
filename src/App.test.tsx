@@ -1,9 +1,28 @@
 import React from 'react';
 import { render } from '@testing-library/react';
-import App from './App';
+import { heap, enter, Expression, } from './App';
 
-test('renders learn react link', () => {
-  const { getByText } = render(<App />);
-  const linkElement = getByText(/learn react/i);
-  expect(linkElement).toBeInTheDocument();
+test('runs the MACHINE', () => {
+  let expression: Expression = { kind: "Var", name: "main" };
+  console.log(expression);
+  expression = enter(expression);
+  console.log(expression);
+  expression = enter(expression);
+  console.log(expression);
+  expression = enter(expression);
+  console.log(expression);
+  expression = enter(expression);
+  console.log(expression);
+  expression = enter(expression);
+  console.log(expression);
+  expression = enter(expression);
+  console.log(expression);
+  expression = enter(expression);
+  console.log(expression);
+  expression = enter(expression);
+  console.log(expression);
+  expression = enter(expression);
+  console.log(expression);
+  expression = enter(expression);
+  console.log(expression);
 });
