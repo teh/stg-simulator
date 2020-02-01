@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import logo from './logo.svg';
 import './App.css';
 import { notStrictEqual } from 'assert';
@@ -104,7 +104,9 @@ export type Atom = Literal | Var;
 
 const stack: Continuation[] = [];
 
-export const heap: Record<string, HeapObject> = {
+
+
+export const mkHeap = (): Record<string, HeapObject> => ({
   nil: { kind: "CON", tag: "Nil", payload: [] },
   zero: { kind: "CON", tag: "I", payload: [0] },
   one: { kind: "CON", tag: "I", payload: [1] },
@@ -168,7 +170,8 @@ export const heap: Record<string, HeapObject> = {
   main: {
     kind: "THUNK", expression: { kind: "FunctionCall", f: mkVar("sum"), arguments: [mkVar("list3")] },
   }
-}
+})
+export let heap = mkHeap();
 
 const isValue = (v: Var) => {
   // Section 3.1:
@@ -381,23 +384,41 @@ export const enter = (e: Expression): Expression => {
 }
 
 const App: React.FC = () => {
-
+  let [step, setStep] = useState(36);
   let expression: Expression = { kind: "Var", name: "main" };
-  console.log(expression);
-  expression = enter(expression);
+
+  heap = mkHeap();
+  varCounter = 0;
+  stack.splice(0, stack.length);
+  for (let i = 0; i < step; i++) {
+    console.log(expression);
+    expression = enter(expression);
+  }
 
   return (
     <div>
       <h2>Spineless Tagless G machine simulator</h2>
       <p>This page simulates a very simple version of the Spineless,
         Tagless G machine with eval/apply calling conventions.</p>
-      <p>I mostly followed the paper
-         <a href="https://simonmar.github.io/bib/papers/eval-apply.pdf">Making a Fast Curry:
-         Push/Enter vs. Eval/Apply for Higher-order Languages</a>, but also referenced the
-         <a href="https://wiki.haskell.org/Ministg">MiniSTG</a> language.
+      <p>I mostly followed the
+         the paper <a href="https://simonmar.github.io/bib/papers/eval-apply.pdf">Making a Fast Curry:
+         Push/Enter vs. Eval/Apply for Higher-order Languages</a>, but also referenced
+         the <a href="https://wiki.haskell.org/Ministg">MiniSTG</a> language.
       </p>
       <p>This implementation supports only one data type, numbers, and one operation: addition.
-        It lacks garbage collection.</p>
+        It lacks garbage collection.
+        </p>
+        <button onClick={() => { if (step > 0) { setStep(step - 1)}}}>back</button>
+        {step}
+        <button onClick={() => { if (step < 40) { setStep(step + 1)}}}>forward</button>
+      <div>
+        <ul>
+          {stack.map(x => <li>{x.kind}</li>)}
+        </ul>
+        <ul>
+          {Object.keys(heap).map(x => <li>{x} - {heap[x].kind}</li>)}
+        </ul>
+      </div>
     </div>
   );
 }
