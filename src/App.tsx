@@ -105,8 +105,43 @@ export type Atom = Literal | Var;
 const stack: Continuation[] = [];
 
 
-
 export const mkHeap = (): Record<string, HeapObject> => ({
+  one: { kind: "CON", tag: "I", payload: [1] },
+  two: { kind: "CON", tag: "I", payload: [2] },
+  plusInt: {
+    kind: "FUN", arguments: [mkVar("x"), mkVar("y")], expression: {
+      kind: "Case", expression: mkVar("x"),
+      alternatives: [{
+        kind: "Alternative", tag: "I", bindingName: [mkLiteral("i")], expression: {
+          kind: "Case", expression: mkVar("y"),
+          alternatives: [{
+            kind: "Alternative", tag: "I", bindingName: [mkLiteral("j")], expression: {
+              kind: "Case", expression: { kind: "PrimPlus", a1: mkLiteral("i"), a2: mkLiteral("j") },
+              alternatives: [{
+                kind: "Alternative",
+                tag: "default",
+                bindingName: [mkVar("result")],
+                expression: {
+                  kind: "Let", name: "value",
+                  newObject: { kind: "CON", tag: "I", payload: [mkVar("result")] },
+                  in: mkVar("value")
+                },
+              }]
+            }
+          }]
+        }
+      }]
+    }
+  },
+  main: {
+    kind: "THUNK", expression: {
+      kind: "FunctionCall", f: mkVar("plusInt"),
+      arguments: [mkVar("one"), mkVar("two")]
+    },
+  },
+})
+
+export const mkHeap2 = (): Record<string, HeapObject> => ({
   nil: { kind: "CON", tag: "Nil", payload: [] },
   zero: { kind: "CON", tag: "I", payload: [0] },
   one: { kind: "CON", tag: "I", payload: [1] },
@@ -184,6 +219,7 @@ const isValue = (v: Var) => {
 export const substitute = (e: Expression, old: Atom, newAtom: Atom): Expression => {
   const substituteVar = (v: Var): Var => v.name === old.name ? (newAtom as Var) : v;
   const substituteAtom = (v: Atom): Atom => v.name === old.name ? newAtom : v;
+  const substituteLiteral = (v: Literal): Literal => v.name === old.name ? (newAtom as Literal) : v;
 
   const substituteObject = (obj: HeapObject): HeapObject => {
     switch (obj.kind) {
@@ -243,7 +279,7 @@ export const substitute = (e: Expression, old: Atom, newAtom: Atom): Expression 
       return e;
     }
     case "PrimPlus": {
-      return e;
+      return { kind: e.kind, a1: substituteLiteral(e.a1), a2: substituteLiteral(e.a2)};
     }
     case "Literal": {
       throw new Error("literal can't be substituted")
@@ -260,7 +296,8 @@ export const enter = (e: Expression): Expression | null => {
       if (stackTop !== undefined && stackTop.kind === "CaseCont") {
         stack.pop();
         const alt = stackTop.alternatives[0]
-        if (alt && alt.tag == "default") {
+        if (alt && alt.tag == "I") {
+          const lit = mkLiteral(alt.bindingName[0].name);
           let exp = substitute(alt.expression, alt.bindingName[0], e);
           return exp;
         }
@@ -296,7 +333,12 @@ export const enter = (e: Expression): Expression | null => {
                   return exp;
                 }
                 case "I": {
-                  return alt.expression
+                  // replace variables with literal
+                  return substitute(
+                    alt.expression,
+                    alt.bindingName[0],
+                    { kind: "Literal", name: alt.bindingName[0].name, value: obj.payload[0] }
+                  )
                 }
               }
             } // end initial for
@@ -385,7 +427,7 @@ export const enter = (e: Expression): Expression | null => {
 
 const App: React.FC = () => {
   let [step, setStep] = useState(0);
-  let expression: Expression |null = { kind: "Var", name: "main" };
+  let expression: Expression | null = { kind: "Var", name: "main" };
 
   heap = mkHeap();
   varCounter = 0;
@@ -409,9 +451,9 @@ const App: React.FC = () => {
       <p>This implementation supports only one data type, numbers, and one operation: addition.
         It lacks garbage collection.
         </p>
-        <button disabled={step <= 0} onClick={() => { if (step > 0) { setStep(step - 1)}}}>back</button>
-        {step}
-        <button disabled={expression == null} onClick={() => { if (expression != null) { setStep(step + 1)}}}>forward</button>
+      <button disabled={step <= 0} onClick={() => { if (step > 0) { setStep(step - 1) } }}>back</button>
+      {step}
+      <button disabled={expression == null} onClick={() => { if (expression != null) { setStep(step + 1) } }}>forward</button>
       <div>
         <b>{JSON.stringify(expression)}</b>
         <ul>
