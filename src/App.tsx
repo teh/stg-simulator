@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import logo from './logo.svg';
 import './App.css';
-import { notStrictEqual } from 'assert';
+// import { notStrictEqual } from 'assert';
 
 
 function unreachable(e: never): never {
@@ -164,9 +164,9 @@ export const mkHeap = (): Record<string, HeapObject> => ({
       kind: "FunctionCall", f: mkVar("foldl"), arguments: [mkVar("plusInt"), mkVar("zero"), mkVar("list")],
     }
   },
-  list1: { kind: "CON", tag: "Cons", payload: ["one", "nil"] },
-  list2: { kind: "CON", tag: "Cons", payload: ["two", "list1"] },
-  list3: { kind: "CON", tag: "Cons", payload: ["three", "list2"] },
+  list1: { kind: "CON", tag: "Cons", payload: [mkVar("one"), mkVar("nil")] },
+  list2: { kind: "CON", tag: "Cons", payload: [mkVar("two"), mkVar("list1")] },
+  list3: { kind: "CON", tag: "Cons", payload: [mkVar("three"), mkVar("list2")] },
   main: {
     kind: "THUNK", expression: { kind: "FunctionCall", f: mkVar("sum"), arguments: [mkVar("list3")] },
   }
@@ -181,20 +181,20 @@ const isValue = (v: Var) => {
 }
 
 
-export const substitute = (e: Expression, oldName: string, newName: string): Expression => {
-  const substituteVar = (v: Var) => v.name == oldName ? mkVar(newName) : v;
-  const substituteAtom = (v: Atom) => v.name == oldName ? mkVar(newName) : v;
+export const substitute = (e: Expression, old: Atom, newAtom: Atom): Expression => {
+  const substituteVar = (v: Var): Var => v.name === old.name ? (newAtom as Var) : v;
+  const substituteAtom = (v: Atom): Atom => v.name === old.name ? newAtom : v;
 
   const substituteObject = (obj: HeapObject): HeapObject => {
     switch (obj.kind) {
       case "THUNK": {
-        return { kind: obj.kind, expression: substitute(obj.expression, oldName, newName) }
+        return { kind: obj.kind, expression: substitute(obj.expression, old, newAtom) }
       }
       case "CON": {
         return { kind: obj.kind, tag: obj.tag, payload: obj.payload.map(x => substituteObject(x)) }
       }
       case "FUN": {
-        return { kind: obj.kind, arguments: obj.arguments, expression: substitute(obj.expression, oldName, newName) }
+        return { kind: obj.kind, arguments: obj.arguments, expression: substitute(obj.expression, old, newAtom) }
       }
       case "PAP": {
         return {
@@ -219,11 +219,11 @@ export const substitute = (e: Expression, oldName: string, newName: string): Exp
       // need to walk all Alt branches
       return {
         kind: e.kind,
-        expression: substitute(e.expression, oldName, newName),
+        expression: substitute(e.expression, old, newAtom),
         alternatives: e.alternatives.map(alt => ({
           kind: "Alternative",
           tag: alt.tag,
-          expression: substitute(alt.expression, oldName, newName),
+          expression: substitute(alt.expression, old, newAtom),
           bindingName: alt.bindingName,
         })),
       }
@@ -231,15 +231,16 @@ export const substitute = (e: Expression, oldName: string, newName: string): Exp
     case "Let": {
       return {
         kind: e.kind,
-        in: substitute(e.in, oldName, newName),
+        in: substitute(e.in, old, newAtom),
         newObject: substituteObject(e.newObject),
         name: e.name, // What about shadowing names?
       }
     }
     case "Var": {
-      if (e.name == oldName) {
-        return mkVar(newName)
+      if (e.name === old.name) {
+        return newAtom
       }
+      return e;
     }
     case "PrimPlus": {
       return e;
@@ -252,7 +253,7 @@ export const substitute = (e: Expression, oldName: string, newName: string): Exp
 }
 
 
-export const enter = (e: Expression): Expression => {
+export const enter = (e: Expression): Expression | null => {
   switch (e.kind) {
     case "Literal": {
       const stackTop = stack[stack.length - 1];
@@ -260,7 +261,7 @@ export const enter = (e: Expression): Expression => {
         stack.pop();
         const alt = stackTop.alternatives[0]
         if (alt && alt.tag == "default") {
-          let exp = substitute(alt.expression, alt.bindingName[0].name, e.name);
+          let exp = substitute(alt.expression, alt.bindingName[0], e);
           return exp;
         }
       }
@@ -290,8 +291,8 @@ export const enter = (e: Expression): Expression => {
                 case "Cons": {
                   const h = obj.payload[0];
                   const t = obj.payload[1];
-                  let exp = substitute(alt.expression, alt.bindingName[0].name, h)
-                  exp = substitute(exp, alt.bindingName[1].name, t)
+                  let exp = substitute(alt.expression, alt.bindingName[0], h)
+                  exp = substitute(exp, alt.bindingName[1], t)
                   return exp;
                 }
                 case "I": {
@@ -312,8 +313,7 @@ export const enter = (e: Expression): Expression => {
             heap[stackTop.var.name] = heap[e.name];
             return e;
           }
-          console.log(stack)
-          throw new Error(`unhandled CON case: ${JSON.stringify(heap[e.name])}`);
+          return null;
         case "THUNK":
           console.log("THUNK", e)
           heap[e.name] = { kind: "BLACKHOLE" };
@@ -333,7 +333,7 @@ export const enter = (e: Expression): Expression => {
       // heap alloc, substitute, enter expression
       const v = freshVar();
       heap[v.name] = e.newObject;
-      return substitute(e.in, e.name, v.name);
+      return substitute(e.in, mkVar(e.name), v);
     }
     case "FunctionCall": {
       if (e.f.kind == "Var") {
@@ -346,7 +346,7 @@ export const enter = (e: Expression): Expression => {
 
               let exp: Expression = obj.expression;
               for (let i = 0; i < obj.arguments.length; i++) {
-                exp = substitute(exp, obj.arguments[i].name, e.arguments[i].name)
+                exp = substitute(exp, obj.arguments[i], e.arguments[i])
               }
               console.log("substituted", exp)
               return exp; // substituted all arguments.
@@ -359,7 +359,7 @@ export const enter = (e: Expression): Expression => {
               // substitute everything substitutable
               let exp: Expression = e.f;
               for (let i = 0; i < e.arguments.length; i++) {
-                exp = substitute(exp, obj.arguments[i].name, e.arguments[i].name)
+                exp = substitute(exp, obj.arguments[i], e.arguments[i])
               }
               return exp; // substituted all arguments.
 
@@ -384,14 +384,15 @@ export const enter = (e: Expression): Expression => {
 }
 
 const App: React.FC = () => {
-  let [step, setStep] = useState(36);
-  let expression: Expression = { kind: "Var", name: "main" };
+  let [step, setStep] = useState(0);
+  let expression: Expression |null = { kind: "Var", name: "main" };
 
   heap = mkHeap();
   varCounter = 0;
   stack.splice(0, stack.length);
   for (let i = 0; i < step; i++) {
     console.log(expression);
+    if (expression == null) break;
     expression = enter(expression);
   }
 
@@ -408,15 +409,16 @@ const App: React.FC = () => {
       <p>This implementation supports only one data type, numbers, and one operation: addition.
         It lacks garbage collection.
         </p>
-        <button onClick={() => { if (step > 0) { setStep(step - 1)}}}>back</button>
+        <button disabled={step <= 0} onClick={() => { if (step > 0) { setStep(step - 1)}}}>back</button>
         {step}
-        <button onClick={() => { if (step < 40) { setStep(step + 1)}}}>forward</button>
+        <button disabled={expression == null} onClick={() => { if (expression != null) { setStep(step + 1)}}}>forward</button>
       <div>
+        <b>{JSON.stringify(expression)}</b>
         <ul>
-          {stack.map(x => <li>{x.kind}</li>)}
+          {stack.map(x => <li>{JSON.stringify(x)}</li>)}
         </ul>
         <ul>
-          {Object.keys(heap).map(x => <li>{x} - {heap[x].kind}</li>)}
+          {Object.keys(heap).map(x => <li>{x} - {JSON.stringify(heap[x])}</li>)}
         </ul>
       </div>
     </div>
