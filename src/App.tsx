@@ -474,7 +474,7 @@ const App: React.FC = () => {
         (<span aria-label="step forward" role="img">➡️</span>) arrow keys to step.</p>
         <p>This page simulates a very simple version of the STG
            machine with eval/apply calling conventions.
-        Read the <a href="TODO">blog post</a> for details.
+        Read the <a href="/posts/spineless-tagless-g/">blog post</a> for details.
       </p>
         <div className="step-value">Step: {step}</div>
         <div className="expression-value">{expression === null ? null : expressionPrettyPrint(expression)}</div>
