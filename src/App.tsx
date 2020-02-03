@@ -1,6 +1,8 @@
-// TODO - payload substitution is broken causing heap objects like this:
-// (cocat of an object with the value 2)
-// $1 - {"kind":"CON","tag":"I","payload":[{"kind":"Literal","name":"result","value":"[object Object]2"}]}
+// TODO
+// better pretty printing for
+// * CaseCont
+// * maybe "unroll" the entire program?
+
 import React, { useState, useEffect } from 'react';
 import './App.css';
 // import { notStrictEqual } from 'assert';
@@ -37,8 +39,8 @@ interface BLACKHOLE {
   kind: "BLACKHOLE",
 }
 
-interface FunctionCall {
-  kind: "FunctionCall",
+interface FunctionApply {
+  kind: "FunctionApply",
   f: Var, // lookup on heap
   arguments: Atom[],
 }
@@ -100,48 +102,12 @@ const freshVar = (): Var => {
 }
 
 export type HeapObject = FUN | CON | PAP | THUNK | BLACKHOLE;
-export type Expression = FunctionCall | Case | Let | PrimPlus | Atom;
+export type Expression = FunctionApply | Case | Let | PrimPlus | Atom;
 export type Continuation = CaseCont | UpdateCont | ApplyToArgs;
 export type Atom = Literal | Var;
 
 const stack: Continuation[] = [];
 
-
-export const mkHeap2 = (): Record<string, HeapObject> => ({
-  one: { kind: "CON", tag: "I", payload: [1] },
-  two: { kind: "CON", tag: "I", payload: [2] },
-  plusInt: {
-    kind: "FUN", arguments: [mkVar("x"), mkVar("y")], expression: {
-      kind: "Case", expression: mkVar("x"),
-      alternatives: [{
-        kind: "Alternative", tag: "I", bindingName: [mkLiteral("i")], expression: {
-          kind: "Case", expression: mkVar("y"),
-          alternatives: [{
-            kind: "Alternative", tag: "I", bindingName: [mkLiteral("j")], expression: {
-              kind: "Case", expression: { kind: "PrimPlus", a1: mkLiteral("i"), a2: mkLiteral("j") },
-              alternatives: [{
-                kind: "Alternative",
-                tag: "default",
-                bindingName: [mkVar("result")],
-                expression: {
-                  kind: "Let", name: "value",
-                  newObject: { kind: "CON", tag: "I", payload: [mkVar("result")] },
-                  in: mkVar("value")
-                },
-              }]
-            }
-          }]
-        }
-      }]
-    }
-  },
-  main: {
-    kind: "THUNK", expression: {
-      kind: "FunctionCall", f: mkVar("plusInt"),
-      arguments: [mkVar("one"), mkVar("two")]
-    },
-  },
-})
 
 export const mkHeap = (): Record<string, HeapObject> => ({
   nil: { kind: "CON", tag: "Nil", payload: [] },
@@ -179,16 +145,16 @@ export const mkHeap = (): Record<string, HeapObject> => ({
     kind: "FUN", arguments: [mkVar("f"), mkVar("acc"), mkVar("list")], expression: {
       kind: "Case", expression: mkVar("list"),
       alternatives: [
-        { kind: "Alternative", tag: "Nil", bindingName: [mkVar("_")], expression: mkVar("acc") },
+        { kind: "Alternative", tag: "Nil", bindingName: [], expression: mkVar("acc") },
         {
           kind: "Alternative", tag: "Cons", bindingName: [mkVar("h"), mkVar("t")], expression: {
             kind: "Let", name: "newAcc", newObject: {
               kind: "THUNK", expression: {
-                kind: "FunctionCall", f: mkVar("f"),
+                kind: "FunctionApply", f: mkVar("f"),
                 arguments: [mkVar("acc"), mkVar("h")]
               },
             }, in: {
-              kind: "FunctionCall", f: mkVar("foldl"), arguments: [mkVar("f"), mkVar("newAcc"), mkVar("t")],
+              kind: "FunctionApply", f: mkVar("foldl"), arguments: [mkVar("f"), mkVar("newAcc"), mkVar("t")],
             }
           },
         },
@@ -198,14 +164,14 @@ export const mkHeap = (): Record<string, HeapObject> => ({
   // # lazy sum with a well-known space leak
   sum: {
     kind: "FUN", arguments: [mkVar("list")], expression: {
-      kind: "FunctionCall", f: mkVar("foldl"), arguments: [mkVar("plusInt"), mkVar("zero"), mkVar("list")],
+      kind: "FunctionApply", f: mkVar("foldl"), arguments: [mkVar("plusInt"), mkVar("zero"), mkVar("list")],
     }
   },
   list1: { kind: "CON", tag: "Cons", payload: [mkVar("one"), mkVar("nil")] },
   list2: { kind: "CON", tag: "Cons", payload: [mkVar("two"), mkVar("list1")] },
   list3: { kind: "CON", tag: "Cons", payload: [mkVar("three"), mkVar("list2")] },
   main: {
-    kind: "THUNK", expression: { kind: "FunctionCall", f: mkVar("sum"), arguments: [mkVar("list3")] },
+    kind: "THUNK", expression: { kind: "FunctionApply", f: mkVar("sum"), arguments: [mkVar("list3")] },
   }
 })
 export let heap = mkHeap();
@@ -246,7 +212,7 @@ export const substitute = (e: Expression, old: Atom, newAtom: Atom): Expression 
   };
 
   switch (e.kind) {
-    case "FunctionCall": {
+    case "FunctionApply": {
       return {
         kind: e.kind,
         f: substituteVar(e.f),
@@ -381,7 +347,7 @@ export const enter = (e: Expression): Expression | null => {
       heap[v.name] = e.newObject;
       return substitute(e.in, mkVar(e.name), v);
     }
-    case "FunctionCall": {
+    case "FunctionApply": {
       if (e.f.kind == "Var") {
         // console.log("H", `"${e.f.name}"`, heap)
         const obj = heap[e.f.name];
@@ -439,7 +405,7 @@ const atomPrettyPrint = (a: Atom): JSX.Element => {
 const heapPrettyPrint = (key: string, obj: HeapObject): JSX.Element => {
   switch (obj.kind) {
     case "BLACKHOLE": return <span>{key}: BLACKHOLE</span>;
-    case "FUN": return <span>{key}: FUN({obj.arguments.map(x => x.name + " ")})</span>;
+    case "FUN": return <span>{key}: FUN({obj.arguments.map(x => x.name).join(" ")})</span>;
     case "CON": return <span>{key}: CON({obj.tag} {obj.payload.map(x => atomPrettyPrint(x))})</span>;
     case "PAP": return <span>{key}: PAP</span>;
     case "THUNK": return <span>{key}: THUNK ({expressionPrettyPrint(obj.expression)})</span>;
@@ -449,7 +415,13 @@ const heapPrettyPrint = (key: string, obj: HeapObject): JSX.Element => {
 const stackPrettyPrint = (cont: Continuation): JSX.Element => {
   switch (cont.kind) {
     case "ApplyToArgs": return <span>ApplyToArgs</span>;
-    case "CaseCont": return <span>CaseCont {cont.alternatives.map(x => x.bindingName.map(y => y.name + " "))}</span>;
+    case "CaseCont": return (
+      <span>
+        CaseCont <br/>{cont.alternatives.map(
+          branch => (<span className="casecont-branch">{branch.tag} {branch.bindingName.map(y => y.name).join(" ")} -> ...<br/></span>))}
+      </span>
+    )
+      ;
     case "UpdateCont": return <span>UpdateCont <span className="heap-object">{atomPrettyPrint(cont.var)}</span></span>;
   }
 }
@@ -457,7 +429,7 @@ const stackPrettyPrint = (cont: Continuation): JSX.Element => {
 const expressionPrettyPrint = (e: Expression): JSX.Element => {
   switch (e.kind) {
     case "Case": return <span>Case ({expressionPrettyPrint(e.expression)}) of</span>;
-    case "FunctionCall": return <span>FunctionCall {atomPrettyPrint(e.f)}</span>;
+    case "FunctionApply": return <span>FunctionApply {atomPrettyPrint(e.f)}</span>;
     case "Let": return <span>Let {e.name} in {heapPrettyPrint(e.name, e.newObject)}</span>;
     case "Literal": return <span>Literal</span>;
     case "Var": return <span>Var {e.name}</span>;
@@ -510,6 +482,7 @@ const App: React.FC = () => {
       </p>
         <div className="step-value">Step: {step}</div>
         <div className="expression-value">{expression === null ? null : expressionPrettyPrint(expression)}</div>
+        <hr/>
         <pre>{`
 nil = CON(Nil);
 zero = CON(I 0);
@@ -540,7 +513,7 @@ foldl = FUN(f acc list ->
 
   main = THUNK(sum list3);
           `}</pre>
-          <a href="https://wiki.haskell.org/Ministg#Source_language">Program borrowed from here</a>
+        <a href="https://wiki.haskell.org/Ministg#Source_language">Program borrowed from here</a>
       </div>
       <div className="stack">
         <h2>Stack</h2>
@@ -551,7 +524,9 @@ foldl = FUN(f acc list ->
       <div className="heap">
         <h2>Heap</h2>
         <ul>
-          {Object.keys(heap).map(x => <li>{heapPrettyPrint(x, heap[x])}</li>)}
+          {Object.keys(heap).map(x =>
+            <li className={expression?.kind === "Var" ? (expression.name == x ? "heap-var-active" : "") : ""}>
+              {heapPrettyPrint(x, heap[x])}</li>)}
         </ul>
       </div>
     </div>

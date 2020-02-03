@@ -1,5 +1,5 @@
 body {
-    font-size: 0.9rem;
+    font-size: 10pt;
 }
 div.stackheap {
     display: grid;
@@ -34,16 +34,13 @@ ul {
     font-family: 'Courier New', Courier, monospace;
 }
 
-.description button:active {
-    box-shadow: black 0px 0px;
-}
 
 div.step-value {
     font-size: 1.5rem;
 }
 
 pre {
-    font-size: 0.8rem;
+    font-size: 0.7rem;
 }
 
 h2 {
@@ -53,6 +50,17 @@ h2 {
 div.expression-value {
     font-family: 'Courier New', Courier, monospace;
     margin: .5rem 0rem;
-    color: red;
+    color: #36f;
     font-weight: bold;
+    height: 3rem;
+}
+li.heap-var-active {
+    font-weight: bold;
+    color: #36f;
+}
+
+span.casecont-branch {
+    margin-left: 20px;
+    border-left: 2px solid black;
+    padding-left: .2rem;
 }
