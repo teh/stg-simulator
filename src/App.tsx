@@ -176,12 +176,6 @@ export const mkHeap = (): Record<string, HeapObject> => ({
 })
 export let heap = mkHeap();
 
-const isValue = (v: Var) => {
-  // Section 3.1:
-  // "Of these, FUN , PAP and CON objects are values, and cannot be evaluated any
-  // further."
-  return ["FUN", "PAP", "CON"].includes(heap[v.name].kind);
-}
 
 
 export const substitute = (e: Expression, old: Atom, newAtom: Atom): Expression => {
@@ -264,7 +258,7 @@ export const enter = (e: Expression): Expression | null => {
       if (stackTop !== undefined && stackTop.kind === "CaseCont") {
         stack.pop();
         const alt = stackTop.alternatives[0]
-        if (alt && alt.tag == "default") {
+        if (alt && alt.tag === "default") {
           const lit = mkLiteral(alt.bindingName[0].name);
           lit.value = e.value;
           let exp = substitute(alt.expression, alt.bindingName[0], lit);
@@ -290,7 +284,7 @@ export const enter = (e: Expression): Expression | null => {
             console.log("stackTop.alternatives", stackTop.alternatives[0])
             for (let alt of stackTop.alternatives) {
               // find matching tag branch
-              if (alt.tag != obj.tag) { continue }
+              if (alt.tag !== obj.tag) { continue }
               switch (alt.tag) {
                 case "Nil": {
                   return alt.expression
@@ -313,7 +307,7 @@ export const enter = (e: Expression): Expression | null => {
               }
             } // end initial for
             for (let alt of stackTop.alternatives) {
-              if (alt.tag == "default") {
+              if (alt.tag === "default") {
                 console.log("default case")
                 return alt.expression;
               }
@@ -334,6 +328,7 @@ export const enter = (e: Expression): Expression | null => {
         case "BLACKHOLE":
           throw new Error("loopy");
       }
+      throw new Error("unhandled");
     }
     case "PrimPlus": {
       // TODO - this isn't really a primop in the paper sense because I'm heap-allocating.
@@ -348,13 +343,13 @@ export const enter = (e: Expression): Expression | null => {
       return substitute(e.in, mkVar(e.name), v);
     }
     case "FunctionApply": {
-      if (e.f.kind == "Var") {
+      if (e.f.kind === "Var") {
         // console.log("H", `"${e.f.name}"`, heap)
         const obj = heap[e.f.name];
         switch (obj.kind) {
           case "FUN": {
             console.log("FUN", obj.arguments.length, e.arguments.length)
-            if (obj.arguments.length == e.arguments.length) {
+            if (obj.arguments.length === e.arguments.length) {
 
               let exp: Expression = obj.expression;
               for (let i = 0; i < obj.arguments.length; i++) {
@@ -395,10 +390,10 @@ export const enter = (e: Expression): Expression | null => {
   unreachable(e);
 }
 
-const atomPrettyPrint = (a: Atom): JSX.Element => {
+const atomPrettyPrint = (a: Atom): string => {
   switch (a.kind) {
-    case "Literal": return <span>{a.value} </span>;
-    case "Var": return <span>{a.name} </span>;
+    case "Literal": return a.value.toString();
+    case "Var": return a.name;
   }
 }
 
@@ -406,7 +401,7 @@ const heapPrettyPrint = (key: string, obj: HeapObject): JSX.Element => {
   switch (obj.kind) {
     case "BLACKHOLE": return <span>{key}: BLACKHOLE</span>;
     case "FUN": return <span>{key}: FUN({obj.arguments.map(x => x.name).join(" ")})</span>;
-    case "CON": return <span>{key}: CON({obj.tag} {obj.payload.map(x => atomPrettyPrint(x))})</span>;
+    case "CON": return <span>{key}: CON({obj.tag} {obj.payload.map(x => atomPrettyPrint(x)).join(" ")})</span>;
     case "PAP": return <span>{key}: PAP</span>;
     case "THUNK": return <span>{key}: THUNK ({expressionPrettyPrint(obj.expression)})</span>;
   }
@@ -475,7 +470,8 @@ const App: React.FC = () => {
     <div className="stackheap">
       <div className="description">
         <h2>Spineless Tagless G machine simulator (STG)</h2>
-        <p>Use the left (⬅️) and right (➡️) arrow keys to step.</p>
+        <p>Use the left (<span aria-label="step back" role="img">⬅️</span>) and right
+        (<span aria-label="step forward" role="img">➡️</span>) arrow keys to step.</p>
         <p>This page simulates a very simple version of the STG
            machine with eval/apply calling conventions.
         Read the <a href="TODO">blog post</a> for details.
@@ -525,7 +521,7 @@ foldl = FUN(f acc list ->
         <h2>Heap</h2>
         <ul>
           {Object.keys(heap).map(x =>
-            <li className={expression?.kind === "Var" ? (expression.name == x ? "heap-var-active" : "") : ""}>
+            <li className={expression?.kind === "Var" ? (expression.name === x ? "heap-var-active" : "") : ""}>
               {heapPrettyPrint(x, heap[x])}</li>)}
         </ul>
       </div>
