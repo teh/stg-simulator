@@ -24,6 +24,10 @@ div.heap {
     padding: 0rem 1rem;
 }
 
+span.heap-object {
+    color: #ffb6cb;
+}
+
 ul {
     list-style-type: none;
     padding: 0px;
@@ -48,4 +52,7 @@ h2 {
 
 div.expression-value {
     font-family: 'Courier New', Courier, monospace;
+    margin: .5rem 0rem;
+    color: red;
+    font-weight: bold;
 }

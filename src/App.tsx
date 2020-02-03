@@ -439,10 +439,10 @@ const atomPrettyPrint = (a: Atom): JSX.Element => {
 const heapPrettyPrint = (key: string, obj: HeapObject): JSX.Element => {
   switch (obj.kind) {
     case "BLACKHOLE": return <span>{key}: BLACKHOLE</span>;
-    case "FUN": return <span>{key}: FUN({obj.arguments.map(x => x.name)})</span>;
+    case "FUN": return <span>{key}: FUN({obj.arguments.map(x => x.name + " ")})</span>;
     case "CON": return <span>{key}: CON({obj.tag} {obj.payload.map(x => atomPrettyPrint(x))})</span>;
     case "PAP": return <span>{key}: PAP</span>;
-    case "THUNK": return <span>{key}: THUNK</span>;
+    case "THUNK": return <span>{key}: THUNK ({expressionPrettyPrint(obj.expression)})</span>;
   }
 }
 
@@ -450,7 +450,7 @@ const stackPrettyPrint = (cont: Continuation): JSX.Element => {
   switch (cont.kind) {
     case "ApplyToArgs": return <span>ApplyToArgs</span>;
     case "CaseCont": return <span>CaseCont {cont.alternatives.map(x => x.bindingName.map(y => y.name + " "))}</span>;
-    case "UpdateCont": return <span>UpdateCont {atomPrettyPrint(cont.var)}</span>;
+    case "UpdateCont": return <span>UpdateCont <span className="heap-object">{atomPrettyPrint(cont.var)}</span></span>;
   }
 }
 
