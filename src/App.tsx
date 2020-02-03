@@ -1,5 +1,7 @@
+// TODO - payload substitution is broken causing heap objects like this:
+// (cocat of an object with the value 2)
+// $1 - {"kind":"CON","tag":"I","payload":[{"kind":"Literal","name":"result","value":"[object Object]2"}]}
 import React, { useState } from 'react';
-import logo from './logo.svg';
 import './App.css';
 // import { notStrictEqual } from 'assert';
 
@@ -105,7 +107,7 @@ export type Atom = Literal | Var;
 const stack: Continuation[] = [];
 
 
-export const mkHeap = (): Record<string, HeapObject> => ({
+export const mkHeap2 = (): Record<string, HeapObject> => ({
   one: { kind: "CON", tag: "I", payload: [1] },
   two: { kind: "CON", tag: "I", payload: [2] },
   plusInt: {
@@ -141,12 +143,12 @@ export const mkHeap = (): Record<string, HeapObject> => ({
   },
 })
 
-export const mkHeap2 = (): Record<string, HeapObject> => ({
+export const mkHeap = (): Record<string, HeapObject> => ({
   nil: { kind: "CON", tag: "Nil", payload: [] },
-  zero: { kind: "CON", tag: "I", payload: [0] },
-  one: { kind: "CON", tag: "I", payload: [1] },
-  two: { kind: "CON", tag: "I", payload: [2] },
-  three: { kind: "CON", tag: "I", payload: [3] },
+  zero: { kind: "CON", tag: "I", payload: [{ kind: "Literal", name: "-", value: 0}] },
+  one: { kind: "CON", tag: "I", payload: [{ kind: "Literal", name: "-", value: 1}] },
+  two: { kind: "CON", tag: "I", payload: [{ kind: "Literal", name: "-", value: 2}] },
+  three: { kind: "CON", tag: "I", payload: [{ kind: "Literal", name: "-", value: 3}] },
 
   plusInt: {
     kind: "FUN", arguments: [mkVar("x"), mkVar("y")], expression: {
@@ -227,7 +229,7 @@ export const substitute = (e: Expression, old: Atom, newAtom: Atom): Expression 
         return { kind: obj.kind, expression: substitute(obj.expression, old, newAtom) }
       }
       case "CON": {
-        return { kind: obj.kind, tag: obj.tag, payload: obj.payload.map(x => substituteObject(x)) }
+        return { kind: obj.kind, tag: obj.tag, payload: obj.payload.map(x => substituteAtom(substituteObject(x) as any)) }
       }
       case "FUN": {
         return { kind: obj.kind, arguments: obj.arguments, expression: substitute(obj.expression, old, newAtom) }
@@ -296,9 +298,11 @@ export const enter = (e: Expression): Expression | null => {
       if (stackTop !== undefined && stackTop.kind === "CaseCont") {
         stack.pop();
         const alt = stackTop.alternatives[0]
-        if (alt && alt.tag == "I") {
+        if (alt && alt.tag == "default") {
           const lit = mkLiteral(alt.bindingName[0].name);
-          let exp = substitute(alt.expression, alt.bindingName[0], e);
+          lit.value = e.value;
+          let exp = substitute(alt.expression, alt.bindingName[0], lit);
+          console.log("SUBST", exp)
           return exp;
         }
       }
@@ -337,7 +341,7 @@ export const enter = (e: Expression): Expression | null => {
                   return substitute(
                     alt.expression,
                     alt.bindingName[0],
-                    { kind: "Literal", name: alt.bindingName[0].name, value: obj.payload[0] }
+                    { kind: "Literal", name: alt.bindingName[0].name, value: obj.payload[0].value }
                   )
                 }
               }
@@ -426,7 +430,7 @@ export const enter = (e: Expression): Expression | null => {
 }
 
 const App: React.FC = () => {
-  let [step, setStep] = useState(0);
+  let [step, setStep] = useState(30);
   let expression: Expression | null = { kind: "Var", name: "main" };
 
   heap = mkHeap();
