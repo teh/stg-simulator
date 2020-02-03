@@ -1,3 +1,6 @@
+body {
+    font-size: 0.9rem;
+}
 div.stackheap {
     display: grid;
     grid-template-columns: 34% 33% 33%;
@@ -11,13 +14,13 @@ div.description {
 
 div.stack {
     grid-column: 2;
-    background-color: #b5c689;
+    background-color: #6a7b9c;
     padding: 0rem 1rem;
 }
 
 div.heap {
     grid-column: 3;
-    background-color: #43abc9;
+    background-color: #ffb6cb;
     padding: 0rem 1rem;
 }
 
@@ -26,7 +29,6 @@ ul {
     padding: 0px;
     font-family: 'Courier New', Courier, monospace;
 }
-
 
 .description button:active {
     box-shadow: black 0px 0px;
@@ -42,4 +44,8 @@ pre {
 
 h2 {
     font-size: 1.2rem;
+}
+
+div.expression-value {
+    font-family: 'Courier New', Courier, monospace;
 }

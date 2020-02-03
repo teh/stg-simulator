@@ -429,28 +429,39 @@ export const enter = (e: Expression): Expression | null => {
   unreachable(e);
 }
 
-const atomPrettyPrint = (a: Atom): string => {
+const atomPrettyPrint = (a: Atom): JSX.Element => {
   switch (a.kind) {
-    case "Literal": return `${a.value}`;
-    case "Var": return `${a.name}`;
+    case "Literal": return <span>{a.value} </span>;
+    case "Var": return <span>{a.name} </span>;
   }
 }
 
-const heapPrettyPrint = (obj: HeapObject): string => {
+const heapPrettyPrint = (key: string, obj: HeapObject): JSX.Element => {
   switch (obj.kind) {
-    case "BLACKHOLE": return "BLACKHOLE";
-    case "FUN": return `FUN ${obj.arguments.map(x => x.name)}`;
-    case "CON": return `CON ${obj.tag} ${obj.payload.map(x => atomPrettyPrint(x))}`;
-    case "PAP": return "PAP";
-    case "THUNK": return "THUNK";
+    case "BLACKHOLE": return <span>{key}: BLACKHOLE</span>;
+    case "FUN": return <span>{key}: FUN({obj.arguments.map(x => x.name)})</span>;
+    case "CON": return <span>{key}: CON({obj.tag} {obj.payload.map(x => atomPrettyPrint(x))})</span>;
+    case "PAP": return <span>{key}: PAP</span>;
+    case "THUNK": return <span>{key}: THUNK</span>;
   }
 }
 
-const stackPrettyPrint = (cont: Continuation): string => {
+const stackPrettyPrint = (cont: Continuation): JSX.Element => {
   switch (cont.kind) {
-    case "ApplyToArgs": return "ApplyToArgs";
-    case "CaseCont": return `CaseCont ${cont.alternatives.map(x => x.bindingName.map(y => y.name))}`;
-    case "UpdateCont": return `UpdateCont ${atomPrettyPrint(cont.var)}`;
+    case "ApplyToArgs": return <span>ApplyToArgs</span>;
+    case "CaseCont": return <span>CaseCont {cont.alternatives.map(x => x.bindingName.map(y => y.name + " "))}</span>;
+    case "UpdateCont": return <span>UpdateCont {atomPrettyPrint(cont.var)}</span>;
+  }
+}
+
+const expressionPrettyPrint = (e: Expression): JSX.Element => {
+  switch (e.kind) {
+    case "Case": return <span>Case ({expressionPrettyPrint(e.expression)}) of</span>;
+    case "FunctionCall": return <span>FunctionCall {atomPrettyPrint(e.f)}</span>;
+    case "Let": return <span>Let {e.name} in {heapPrettyPrint(e.name, e.newObject)}</span>;
+    case "Literal": return <span>Literal</span>;
+    case "Var": return <span>Var {e.name}</span>;
+    case "PrimPlus": return <span>{atomPrettyPrint(e.a1)} + {atomPrettyPrint(e.a2)}</span>;
   }
 }
 
@@ -492,18 +503,13 @@ const App: React.FC = () => {
     <div className="stackheap">
       <div className="description">
         <h2>Spineless Tagless G machine simulator (STG)</h2>
+        <p>Use the left (⬅️) and right (➡️) arrow keys to step.</p>
         <p>This page simulates a very simple version of the STG
-           machine with eval/apply calling conventions.</p>
-        <p>Read the <a href="TODO">blog post</a> for details. Use the left (⬅️) and right (➡️) arrow keys to step.
+           machine with eval/apply calling conventions.
+        Read the <a href="TODO">blog post</a> for details.
       </p>
         <div className="step-value">Step: {step}</div>
-        {/* <button disabled={step <= 0} onClick={backStep}>back</button>
-        <button disabled={expression == null} onClick={forwardStep}>forward</button> */}
-        <div>
-          {/* <b>{JSON.stringify(expression)}</b> */}
-        </div>
-        <br></br>
-        <a href="https://wiki.haskell.org/Ministg#Source_language">Program borrowed from here</a>
+        <div className="expression-value">{expression === null ? null : expressionPrettyPrint(expression)}</div>
         <pre>{`
 nil = CON(Nil);
 zero = CON(I 0);
@@ -525,15 +531,16 @@ foldl = FUN(f acc list ->
     } in foldl f newAcc t
   });
 
-# lazy sum with a well-known space leak
-sum = FUN(list -> foldl plusInt zero list);
+  # lazy sum with a well-known space leak
+  sum = FUN(list -> foldl plusInt zero list);
 
-list1 = CON(Cons one nil);
-list2 = CON(Cons two list1);
-list3 = CON(Cons three list2);
+  list1 = CON(Cons one nil);
+  list2 = CON(Cons two list1);
+  list3 = CON(Cons three list2);
 
-main = THUNK(sum list3);
-        `}</pre>
+  main = THUNK(sum list3);
+          `}</pre>
+          <a href="https://wiki.haskell.org/Ministg#Source_language">Program borrowed from here</a>
       </div>
       <div className="stack">
         <h2>Stack</h2>
@@ -544,7 +551,7 @@ main = THUNK(sum list3);
       <div className="heap">
         <h2>Heap</h2>
         <ul>
-          {Object.keys(heap).map(x => <li>{x} - {heapPrettyPrint(heap[x])}</li>)}
+          {Object.keys(heap).map(x => <li>{heapPrettyPrint(x, heap[x])}</li>)}
         </ul>
       </div>
     </div>
