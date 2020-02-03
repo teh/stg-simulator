@@ -1,0 +1,45 @@
+div.stackheap {
+    display: grid;
+    grid-template-columns: 34% 33% 33%;
+    min-height: 100vh;
+}
+
+div.description {
+    grid-column: 1;
+    padding: 0rem 1rem;
+}
+
+div.stack {
+    grid-column: 2;
+    background-color: #b5c689;
+    padding: 0rem 1rem;
+}
+
+div.heap {
+    grid-column: 3;
+    background-color: #43abc9;
+    padding: 0rem 1rem;
+}
+
+ul {
+    list-style-type: none;
+    padding: 0px;
+    font-family: 'Courier New', Courier, monospace;
+}
+
+
+.description button:active {
+    box-shadow: black 0px 0px;
+}
+
+div.step-value {
+    font-size: 1.5rem;
+}
+
+pre {
+    font-size: 0.8rem;
+}
+
+h2 {
+    font-size: 1.2rem;
+}

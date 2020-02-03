@@ -1,7 +1,7 @@
 // TODO - payload substitution is broken causing heap objects like this:
 // (cocat of an object with the value 2)
 // $1 - {"kind":"CON","tag":"I","payload":[{"kind":"Literal","name":"result","value":"[object Object]2"}]}
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import './App.css';
 // import { notStrictEqual } from 'assert';
 
@@ -145,10 +145,10 @@ export const mkHeap2 = (): Record<string, HeapObject> => ({
 
 export const mkHeap = (): Record<string, HeapObject> => ({
   nil: { kind: "CON", tag: "Nil", payload: [] },
-  zero: { kind: "CON", tag: "I", payload: [{ kind: "Literal", name: "-", value: 0}] },
-  one: { kind: "CON", tag: "I", payload: [{ kind: "Literal", name: "-", value: 1}] },
-  two: { kind: "CON", tag: "I", payload: [{ kind: "Literal", name: "-", value: 2}] },
-  three: { kind: "CON", tag: "I", payload: [{ kind: "Literal", name: "-", value: 3}] },
+  zero: { kind: "CON", tag: "I", payload: [{ kind: "Literal", name: "-", value: 0 }] },
+  one: { kind: "CON", tag: "I", payload: [{ kind: "Literal", name: "-", value: 1 }] },
+  two: { kind: "CON", tag: "I", payload: [{ kind: "Literal", name: "-", value: 2 }] },
+  three: { kind: "CON", tag: "I", payload: [{ kind: "Literal", name: "-", value: 3 }] },
 
   plusInt: {
     kind: "FUN", arguments: [mkVar("x"), mkVar("y")], expression: {
@@ -281,7 +281,7 @@ export const substitute = (e: Expression, old: Atom, newAtom: Atom): Expression 
       return e;
     }
     case "PrimPlus": {
-      return { kind: e.kind, a1: substituteLiteral(e.a1), a2: substituteLiteral(e.a2)};
+      return { kind: e.kind, a1: substituteLiteral(e.a1), a2: substituteLiteral(e.a2) };
     }
     case "Literal": {
       throw new Error("literal can't be substituted")
@@ -429,10 +429,37 @@ export const enter = (e: Expression): Expression | null => {
   unreachable(e);
 }
 
+const atomPrettyPrint = (a: Atom): string => {
+  switch (a.kind) {
+    case "Literal": return `${a.value}`;
+    case "Var": return `${a.name}`;
+  }
+}
+
+const heapPrettyPrint = (obj: HeapObject): string => {
+  switch (obj.kind) {
+    case "BLACKHOLE": return "BLACKHOLE";
+    case "FUN": return `FUN ${obj.arguments.map(x => x.name)}`;
+    case "CON": return `CON ${obj.tag} ${obj.payload.map(x => atomPrettyPrint(x))}`;
+    case "PAP": return "PAP";
+    case "THUNK": return "THUNK";
+  }
+}
+
+const stackPrettyPrint = (cont: Continuation): string => {
+  switch (cont.kind) {
+    case "ApplyToArgs": return "ApplyToArgs";
+    case "CaseCont": return `CaseCont ${cont.alternatives.map(x => x.bindingName.map(y => y.name))}`;
+    case "UpdateCont": return `UpdateCont ${atomPrettyPrint(cont.var)}`;
+  }
+}
+
+
 const App: React.FC = () => {
-  let [step, setStep] = useState(30);
+  let [step, setStep] = useState(0);
   let expression: Expression | null = { kind: "Var", name: "main" };
 
+  // We're re-running all steps up to N each time.
   heap = mkHeap();
   varCounter = 0;
   stack.splice(0, stack.length);
@@ -442,29 +469,82 @@ const App: React.FC = () => {
     expression = enter(expression);
   }
 
+  const backStep = () => { if (step > 0) { setStep(step - 1) } };
+  const forwardStep = () => { if (expression != null) { setStep(step + 1) } }
+
+  const keyPress = (e: React.KeyboardEvent) => {
+    if (e.key === "ArrowLeft") {
+      backStep();
+    }
+    if (e.key === "ArrowRight") {
+      forwardStep();
+    }
+  }
+  useEffect(() => {
+    window.addEventListener("keydown", keyPress as any);
+    return () => {
+      window.removeEventListener("keydown", keyPress as any);
+    };
+  }, [step])
+
+
   return (
-    <div>
-      <h2>Spineless Tagless G machine simulator</h2>
-      <p>This page simulates a very simple version of the Spineless,
-        Tagless G machine with eval/apply calling conventions.</p>
-      <p>I mostly followed the
-         the paper <a href="https://simonmar.github.io/bib/papers/eval-apply.pdf">Making a Fast Curry:
-         Push/Enter vs. Eval/Apply for Higher-order Languages</a>, but also referenced
-         the <a href="https://wiki.haskell.org/Ministg">MiniSTG</a> language.
+    <div className="stackheap">
+      <div className="description">
+        <h2>Spineless Tagless G machine simulator (STG)</h2>
+        <p>This page simulates a very simple version of the STG
+           machine with eval/apply calling conventions.</p>
+        <p>Read the <a href="TODO">blog post</a> for details. Use the left (⬅️) and right (➡️) arrow keys to step.
       </p>
-      <p>This implementation supports only one data type, numbers, and one operation: addition.
-        It lacks garbage collection.
-        </p>
-      <button disabled={step <= 0} onClick={() => { if (step > 0) { setStep(step - 1) } }}>back</button>
-      {step}
-      <button disabled={expression == null} onClick={() => { if (expression != null) { setStep(step + 1) } }}>forward</button>
-      <div>
-        <b>{JSON.stringify(expression)}</b>
+        <div className="step-value">Step: {step}</div>
+        {/* <button disabled={step <= 0} onClick={backStep}>back</button>
+        <button disabled={expression == null} onClick={forwardStep}>forward</button> */}
+        <div>
+          {/* <b>{JSON.stringify(expression)}</b> */}
+        </div>
+        <br></br>
+        <a href="https://wiki.haskell.org/Ministg#Source_language">Program borrowed from here</a>
+        <pre>{`
+nil = CON(Nil);
+zero = CON(I 0);
+one = CON(I 1);
+two = CON(I 2);
+three = CON(I 3);
+
+plusInt = FUN(x y ->
+  case x of {
+    I i -> case y of {
+      I j -> case plus# i j of {
+        x -> let { result = CON (I x) } in result }}});
+
+foldl = FUN(f acc list ->
+  case list of {
+    Nil -> acc;
+    Cons h t -> let {
+      newAcc = THUNK(f acc h)
+    } in foldl f newAcc t
+  });
+
+# lazy sum with a well-known space leak
+sum = FUN(list -> foldl plusInt zero list);
+
+list1 = CON(Cons one nil);
+list2 = CON(Cons two list1);
+list3 = CON(Cons three list2);
+
+main = THUNK(sum list3);
+        `}</pre>
+      </div>
+      <div className="stack">
+        <h2>Stack</h2>
         <ul>
-          {stack.map(x => <li>{JSON.stringify(x)}</li>)}
+          {stack.map(x => <li>{stackPrettyPrint(x)}</li>)}
         </ul>
+      </div>
+      <div className="heap">
+        <h2>Heap</h2>
         <ul>
-          {Object.keys(heap).map(x => <li>{x} - {JSON.stringify(heap[x])}</li>)}
+          {Object.keys(heap).map(x => <li>{x} - {heapPrettyPrint(heap[x])}</li>)}
         </ul>
       </div>
     </div>
